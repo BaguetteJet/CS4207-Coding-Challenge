@@ -30,7 +30,7 @@ nbstripout --install
 Also please use [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/) to keep commit history tidy
 
 ## Prepare Dataset
-Run [`download_data.py`](./src/download.py) to download dataset files into `data/`
+Run [`download.py`](./src/download.py) to automatically download dataset files into `data/`
 
 or manually download files into `data/`:
 
@@ -40,4 +40,14 @@ or manually download files into `data/`:
 - [`yellow_tripdata_2026-04.parquet`](https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2026-04.parquet) 61.8 MB
 
 Source: https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page
+
+## Regression
+
+Run [`regression.py`](./src/regression.py) to train and evaluate regression model
+
+Model saved to `/models` as `.joblib` file
+
+## Prediction
+
+Run [`predict.py`](./src/predict.py) to predict duration of new trips
 

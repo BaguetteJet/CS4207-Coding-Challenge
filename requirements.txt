@@ -4,3 +4,6 @@ ipykernel
 ipywidgets
 tqdm
 requests
+scikit-learn
+pandas
+pyarrow
