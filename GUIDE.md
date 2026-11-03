@@ -30,13 +30,14 @@ nbstripout --install
 Also please use [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/) to keep commit history tidy
 
 ## Prepare Dataset
+Run [`download_data.py`](./src/download.py) to download dataset files into `data/`
 
-Source: https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page
-
-Download dataset files:
+or manually download files into `data/`:
 
 - [`yellow_tripdata_2026-01.parquet`](https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2026-01.parquet) 61.2 MB
 - [`yellow_tripdata_2026-02.parquet`](https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2026-02.parquet) 52.0 MB
 - [`yellow_tripdata_2026-03.parquet`](https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2026-03.parquet) 64.7 MB
 - [`yellow_tripdata_2026-04.parquet`](https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2026-04.parquet) 61.8 MB
+
+Source: https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page
 
