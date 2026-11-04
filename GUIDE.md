@@ -41,13 +41,32 @@ or manually download files into `data/`:
 
 Source: https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page
 
-## Regression
+## Preprocess
 
-Run [`regression.py`](./src/regression.py) to train and evaluate regression model
+Run [`preprocess.py`](./src/preprocess.py) to extract features and save the processed data
 
-Model saved to `/models` as `.joblib` file
+Train/Test split saved to `data/processed/` as `.parquet` files (Jan-Mar train, Apr test)
+
+## Train
+
+Run [`train.py`](./src/train.py) to fit the models
+
+Models with the preprocessing pipeline included are saved to `models/` as a `.joblib` files
+
+## Evaluate
+
+Run [`evaluate.py`](./src/evaluate.py) to compare saved models on test split
+
+MAE, RMSE and R^2 metrics saved to `results/metrics.csv`
 
 ## Prediction
 
-Run [`predict.py`](./src/predict.py) to predict duration of new trips
+Run [`predict.py`](./src/predict.py) with a saved model to predict the duration of new trips
+
+```bash
+python src/predict.py models/random_forest.joblib
+python src/predict.py models/random_forest.joblib --input trips.csv
+```
+
+Input need at least `tpep_pickup_datetime`, `PULocationID` and `DOLocationID` columns
 

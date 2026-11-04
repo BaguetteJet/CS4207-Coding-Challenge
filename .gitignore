@@ -9,3 +9,6 @@ data/
 # models
 models/
 *.joblib
+
+# results
+results/
