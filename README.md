@@ -6,7 +6,7 @@
 
 Predict the trip duration (Estimated Time of Arrival) of NYC taxi trips using regression.
 
-> Get started with by following [`GUIDE.md`](GUIDE.md)
+> Get started by following [`GUIDE.md`](GUIDE.md)
 
 ## Dataset
 
