@@ -5,7 +5,7 @@ import pandas as pd
 DATA_DIR = "./data"
 PROCESSED_DIR = "./data/processed"
 
-TEST_MONTH = "2026-04"
+TEST_START, TEST_END = "2026-01", "2026-09"
 
 FEATURES = [
     "PULocationID",
@@ -56,7 +56,8 @@ if __name__ == "__main__":
 
     # Load and split the data into sets
     for file in files:
-        split = "test" if f"yellow_tripdata_{TEST_MONTH}.parquet" in file else "train"
+        month = os.path.basename(file).replace("yellow_tripdata_", "").replace(".parquet", "")
+        split = "test" if TEST_START <= month <= TEST_END else "train"
         splits[split].append(load(file))
 
     # Save processed data to disk
