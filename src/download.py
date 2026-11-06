@@ -5,7 +5,7 @@ import pandas as pd
 DATA_DIR = "./data"
 DATA_URL = "https://d37ci6vzurychx.cloudfront.net/trip-data/"
 
-START, END = "2026-01", "2026-04"
+START, END = "2024-01", "2026-09"
 
 if __name__ == "__main__":
     os.makedirs(DATA_DIR, exist_ok=True)
