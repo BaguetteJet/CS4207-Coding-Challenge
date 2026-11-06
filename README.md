@@ -4,7 +4,7 @@
 
 ## Introduction
 
-Predict the trip duration (Estimated Time of Arrival) of NYC taxi trips using regression.
+Predict the trip duration (Estimated Time of Arrival) of NYC taxi trips using regression. Analyse the difference between running project workloads in sequence vs in parallel. Run experiments on the `@rockhill.csis.ul.ie ` server.
 
 > Get started by following [`GUIDE.md`](GUIDE.md)
 
