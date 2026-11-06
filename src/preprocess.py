@@ -1,30 +1,46 @@
 import os
 import glob
+import numpy as np
 import pandas as pd
 
 DATA_DIR = "./data"
 PROCESSED_DIR = "./data/processed"
 
-TEST_START, TEST_END = "2026-01", "2026-09"
+TEST_START, TEST_END = "2026-01", "2026-09" # train on remaining months
 
 FEATURES = [
     "PULocationID",
     "DOLocationID",
-    "hour",
-    "weekday",
-    "month",
+    "hour_sin",
+    "hour_cos",
+    "weekday_sin",
+    "weekday_cos",
+    "month_sin",
+    "month_cos",
     "is_weekend",
 ]
 
 def extract_features(df):
     pickup = pd.to_datetime(df["tpep_pickup_datetime"])
+
+    hour = pickup.dt.hour
+    weekday = pickup.dt.day_of_week
+    month = pickup.dt.month
+
     return pd.DataFrame({
         "PULocationID": df["PULocationID"],
         "DOLocationID": df["DOLocationID"],
-        "hour": pickup.dt.hour,
-        "weekday": pickup.dt.day_of_week,
-        "month": pickup.dt.month,
-        "is_weekend": (pickup.dt.day_of_week >= 5).astype(int),
+
+        "hour_sin": np.sin(2 * np.pi * hour / 24),
+        "hour_cos": np.cos(2 * np.pi * hour / 24),
+
+        "weekday_sin": np.sin(2 * np.pi * weekday / 7),
+        "weekday_cos": np.cos(2 * np.pi * weekday / 7),
+
+        "month_sin": np.sin(2 * np.pi * (month - 1) / 12),
+        "month_cos": np.cos(2 * np.pi * (month - 1) / 12),
+
+        "is_weekend": (weekday >= 5).astype(int),
     })
 
 def load(path):
