@@ -27,6 +27,8 @@ PROCESSED_DIR = "./data/processed"
 SHARD_ROWS = 500_000
 WORKERS = 8
 
+# months before val_start are training, val_start up to test_start are validation
+VAL_START = "2025-07"
 # months before TEST_START are training data, months after TEST_END are ignored
 TEST_START, TEST_END = "2026-01", "2026-09"
 
@@ -209,8 +211,9 @@ if __name__ == "__main__":
 
     # time-based split
     splits = {
-        "train": [p for p in files if month_of(p) < TEST_START],
-        "test": [p for p in files if TEST_START <= month_of(p) <= TEST_END],
+        "train": [p for p in files if month_of(p) < VAL_START],
+        "val": [p for p in files if VAL_START <= month_of(p) < TEST_START],
+        "test": [p for p in files if TEST_START <= month_of(p) <= TEST_END]
     }
 
     # run the preprocessing tasks in a temporary directory, then move the final Parquet files to PROCESSED_DIR
