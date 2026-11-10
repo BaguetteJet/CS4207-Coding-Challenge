@@ -10,6 +10,7 @@
 
 import glob
 import os
+import argparse
 import tempfile
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor # threads for feature extraction
@@ -148,7 +149,7 @@ def process_shard(shard_id, path, batch, temp_dir):
 
 def process_parallel(shards, workers, temp_dir):
     # process shards in parallel, results come back in shard order
-    results, pending = [], deque()
+    results, pending = [], deque() # queue instead of as_completed() to preserve order of shards
 
     with ProcessPoolExecutor(max_workers=workers) as executor:
         for shard in tqdm(shards, desc="Parallel", unit=" shard", leave=False):
@@ -208,6 +209,16 @@ def run(files, workers, output_path, shard_dir):
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--shard-rows", type=int, default=SHARD_ROWS)
+    parser.add_argument("--workers", type=int, default=WORKERS)
+    parser.add_argument("--threads", type=int, default=THREADS)
+    args = parser.parse_args()
+
+    SHARD_ROWS = args.shard_rows
+    WORKERS = args.workers
+    THREADS = args.threads
+
     os.makedirs(PROCESSED_DIR, exist_ok=True)
 
     files = sorted(glob.glob(os.path.join(DATA_DIR, "yellow_tripdata_*.parquet")))
