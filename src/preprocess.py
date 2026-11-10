@@ -10,6 +10,7 @@
 
 import glob
 import os
+import csv
 import argparse
 import tempfile
 from collections import deque
@@ -25,6 +26,7 @@ import pyarrow.parquet as pq
 
 DATA_DIR = "./data"
 PROCESSED_DIR = "./data/processed"
+RESULTS_DIR = "./results/preprocess"
 
 SHARD_ROWS = 500_000 # rows per shard
 WORKERS = 8 # number of processes for sharding
@@ -208,6 +210,19 @@ def run(files, workers, output_path, shard_dir):
     )
 
 
+def save_summary(split, shard_rows, workers, threads, sequential, parallel):
+    # save summary of run to CSV
+    os.makedirs(RESULTS_DIR, exist_ok=True)
+
+    csv_path = f"{RESULTS_DIR}/summary.csv"
+    with open(csv_path, "a", newline="") as f:
+        writer = csv.writer(f)
+
+        if os.path.getsize(csv_path) == 0:
+            writer.writerow(["split", "shard_rows", "workers", "threads", "sequential", "parallel"])
+        writer.writerow([split, shard_rows, workers, threads, sequential, parallel])
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--shard-rows", type=int, default=SHARD_ROWS)
@@ -260,3 +275,6 @@ if __name__ == "__main__":
             # move final Parquet file to PROCESSED_DIR
             os.replace(output["par"], os.path.join(PROCESSED_DIR, f"{split}.parquet"))
             print(f"  saved {split}.parquet in {perf_counter() - started:.1f} s")
+
+            # save summary of run
+            save_summary(split, SHARD_ROWS, WORKERS, THREADS, seconds["seq"], seconds["par"])
