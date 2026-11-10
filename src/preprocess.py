@@ -140,7 +140,7 @@ def iter_shards(files):
 def process_shard(shard_id, path, batch, temp_dir):
     # clean one shard and write it to temp_dir, then return (file, rows_in, rows_out)
     df = clean(batch.to_pandas(), path)
-    features = extract_features(df).assign(duration_min=df["duration_min"])
+    features = extract_features(df, threads=THREADS).assign(duration_min=df["duration_min"])
 
     out = os.path.join(temp_dir, f"shard_{shard_id:03d}.parquet")
     features.to_parquet(out, index=False)
