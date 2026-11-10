@@ -12,3 +12,6 @@ models/
 
 # results
 results/
+
+# macos finder metadata
+.DS_Store
