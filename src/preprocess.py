@@ -1,16 +1,59 @@
-import os
+# preprocess.py - Igor Kochanski 23358459
+
+# Files are read and sharded into equal smaller chunks
+# Shards are multi-processed in parallel, then merged together (data parallelism)
+# Preprocessing includes cleaning and feature extraction
+# Feature extraction is multi-threaded (task parallelism)
+# Worker 1 = sequential processing, Worker N = parallel processing
+# Results are verified to be identical between sequential and parallel
+# Work is done saved to a temporary directory and done in batches to reduce memory usage
+
 import glob
+import os
+import tempfile
+from collections import deque
+from concurrent.futures import ThreadPoolExecutor # threads for feature extraction
+from concurrent.futures import ProcessPoolExecutor # processes for sharding
+from pathlib import Path
+from time import perf_counter
+
 import numpy as np
 import pandas as pd
+import pyarrow.parquet as pq
 
 DATA_DIR = "./data"
 PROCESSED_DIR = "./data/processed"
 
-TEST_START, TEST_END = "2026-01", "2026-09" # train on remaining months
+SHARD_ROWS = 500_000
+WORKERS = 8
+
+# months before TEST_START are training data, months after TEST_END are ignored
+TEST_START, TEST_END = "2026-01", "2026-09"
+
+PICKUP, DROPOFF = "tpep_pickup_datetime", "tpep_dropoff_datetime"
+COLUMNS = [
+    PICKUP,
+    DROPOFF,
+    "trip_distance",
+    "fare_amount",
+    "RatecodeID",
+    "PULocationID",
+    "DOLocationID",
+]
+
+# Reasonable bounds for NYC taxi trips (same thresholds as parallel_features.py).
+MIN_DURATION, MAX_DURATION = 1, 180      # minutes
+MIN_DISTANCE, MAX_DISTANCE = 0.1, 60     # miles
+MIN_FARE, MAX_FARE = 3, 250              # dollars
+
+# Fixed categories keep the train and test encodings identical.
+ZONES = range(1, 266)                    # TLC taxi zone IDs
+RATE_CODES = [0, 1, 2, 3, 4, 5, 6, 99]   # 0 = Flex Fare (null RatecodeID)
 
 FEATURES = [
     "PULocationID",
     "DOLocationID",
+    "RatecodeID",
     "hour_sin",
     "hour_cos",
     "weekday_sin",
@@ -20,64 +63,182 @@ FEATURES = [
     "is_weekend",
 ]
 
-def extract_features(df):
-    pickup = pd.to_datetime(df["tpep_pickup_datetime"])
+
+def month_of(path):
+    # '.../yellow_tripdata_2026-03.parquet' -> '2026-03'
+    return Path(path).stem.removeprefix("yellow_tripdata_")
+
+
+def cyclic(values, period, name):
+    # periodic feature encoding
+    angle = 2 * np.pi * values / period
+    return {f"{name}_sin": np.sin(angle), f"{name}_cos": np.cos(angle)}
+
+
+def extract_features(df, threads=4):
+    # task parallelism for feature extraction
+    pickup = pd.to_datetime(df[PICKUP])
 
     hour = pickup.dt.hour
     weekday = pickup.dt.day_of_week
     month = pickup.dt.month
 
-    return pd.DataFrame({
-        "PULocationID": df["PULocationID"],
-        "DOLocationID": df["DOLocationID"],
+    tasks = [
+        lambda: {
+            "PULocationID": pd.Categorical(df["PULocationID"], categories=ZONES),
+            "DOLocationID": pd.Categorical(df["DOLocationID"], categories=ZONES),
+            "RatecodeID": pd.Categorical(df["RatecodeID"].fillna(0), categories=RATE_CODES),
+        },
+        lambda: {**cyclic(hour, 24, "hour")},
+        lambda: {**cyclic(weekday, 7, "weekday"), "is_weekend": (weekday >= 5).astype(int)},
+        lambda: {**cyclic(month - 1, 12, "month")},
+    ]
 
-        "hour_sin": np.sin(2 * np.pi * hour / 24),
-        "hour_cos": np.cos(2 * np.pi * hour / 24),
+    with ThreadPoolExecutor(threads) as executor:
+        parts = executor.map(lambda task: task(), tasks)
 
-        "weekday_sin": np.sin(2 * np.pi * weekday / 7),
-        "weekday_cos": np.cos(2 * np.pi * weekday / 7),
+    columns = {name: col for part in parts for name, col in part.items()}
 
-        "month_sin": np.sin(2 * np.pi * (month - 1) / 12),
-        "month_cos": np.cos(2 * np.pi * (month - 1) / 12),
+    return pd.DataFrame(columns, index=df.index)[FEATURES]
 
-        "is_weekend": (weekday >= 5).astype(int),
-    })
 
-def load(path):
-    # Input: trip data
-    df = pd.read_parquet(path, columns=[
-        "tpep_pickup_datetime",
-        "tpep_dropoff_datetime",
-        "PULocationID",
-        "DOLocationID",
-    ])
+def clean(df, path):
+    # keep valid trips only, add duration_min column
+    start = pd.Timestamp(f"{month_of(path)}-01")
+    end = start + pd.DateOffset(months=1)
 
-    # Target: trip duration in minutes
-    df["duration_min"] = (df["tpep_dropoff_datetime"] - df["tpep_pickup_datetime"]).dt.total_seconds() / 60
+    pickup = pd.to_datetime(df[PICKUP])
+    dropoff = pd.to_datetime(df[DROPOFF])
+    duration = (dropoff - pickup).dt.total_seconds() / 60
 
-    # Drop obvious bad records
-    df = df.dropna()
-    df = df[df["duration_min"].between(1, 120)]
+    # no spill-over pickups, nulls, zero/negative durations, zero-distance trips, negative fares, or meter errors
+    ok = (
+        (pickup >= start)
+        & (pickup < end)
+        & duration.between(MIN_DURATION, MAX_DURATION)
+        & df["trip_distance"].between(MIN_DISTANCE, MAX_DISTANCE)
+        & df["fare_amount"].between(MIN_FARE, MAX_FARE)
+        & df["RatecodeID"].fillna(0).isin(RATE_CODES)
+    )
+    return df[ok].assign(duration_min=duration[ok])
 
-    # Extract features
-    features = extract_features(df)
-    features["duration_min"] = df["duration_min"]
-    return features
+
+def iter_shards(files):
+    # yield fixed-size (shard_id, path, batch) shards, in file order
+    shard_id = 0
+    for path in files:
+        for batch in pq.ParquetFile(path).iter_batches(batch_size=SHARD_ROWS, columns=COLUMNS, use_threads=False):
+            yield shard_id, path, batch
+            shard_id += 1
+
+
+def process_shard(shard_id, path, batch, temp_dir):
+    # clean one shard and write it to temp_dir, then return (file, rows_in, rows_out)
+    df = clean(batch.to_pandas(), path)
+    features = extract_features(df).assign(duration_min=df["duration_min"])
+
+    out = os.path.join(temp_dir, f"shard_{shard_id:03d}.parquet")
+    features.to_parquet(out, index=False)
+    return out, batch.num_rows, len(df)
+
+
+def process_parallel(shards, workers, temp_dir):
+    # process shards in parallel, results come back in shard order
+    results, pending = [], deque()
+
+    with ProcessPoolExecutor(max_workers=workers) as executor:
+        for shard in shards:
+            pending.append(executor.submit(process_shard, *shard, temp_dir))
+            if len(pending) >= workers:
+                results.append(pending.popleft().result())
+        results.extend(future.result() for future in pending)
+
+    return results
+
+
+def merge_shards(shard_paths, output_path):
+    # append the shards to one Parquet file, one shard in memory at a time
+    schema = pq.ParquetFile(shard_paths[0]).schema_arrow
+    
+    with pq.ParquetWriter(output_path, schema) as writer:
+        for path in shard_paths:
+            writer.write_table(pq.ParquetFile(path).read())
+
+
+def assert_parquet_equal(left_path, right_path):
+    # compare in batches, so both full frames never coexist in memory
+    left, right = pq.ParquetFile(left_path), pq.ParquetFile(right_path)
+
+    if left.metadata.num_rows != right.metadata.num_rows:
+        raise AssertionError(f"row count differs: {left.metadata.num_rows} != {right.metadata.num_rows}")
+    if not left.schema_arrow.equals(right.schema_arrow):
+        raise AssertionError("Parquet schemas differ")
+
+    # same total rows, so zip() cannot silently drop non-empty batches
+    for left_batch, right_batch in zip(
+        left.iter_batches(batch_size=SHARD_ROWS, use_threads=False),
+        right.iter_batches(batch_size=SHARD_ROWS, use_threads=False),
+    ):
+        pd.testing.assert_frame_equal(left_batch.to_pandas(), right_batch.to_pandas())
+
+
+def run(files, workers, output_path, shard_dir):
+    # process fixed-size shards and merge them into output, returns (n_shards, rows_before, rows_after)
+    os.makedirs(shard_dir, exist_ok=True)
+
+    shards = iter_shards(files)
+
+    if workers == 1: # sequential processing
+        results = [process_shard(*shard, shard_dir) for shard in shards]
+    else: # parallel processing
+        results = process_parallel(shards, workers, shard_dir)
+
+    merge_shards([out for out, _, _ in results], output_path)
+
+    return (
+        len(results),
+        sum(rows_in for _, rows_in, _ in results),
+        sum(rows_out for _, _, rows_out in results),
+    )
+
 
 if __name__ == "__main__":
     os.makedirs(PROCESSED_DIR, exist_ok=True)
 
     files = sorted(glob.glob(os.path.join(DATA_DIR, "yellow_tripdata_*.parquet")))
-    splits = {"train": [], "test": []}
 
-    # Load and split the data into sets
-    for file in files:
-        month = os.path.basename(file).replace("yellow_tripdata_", "").replace(".parquet", "")
-        split = "test" if TEST_START <= month <= TEST_END else "train"
-        splits[split].append(load(file))
+    # time-based split
+    splits = {
+        "train": [p for p in files if month_of(p) < TEST_START],
+        "test": [p for p in files if TEST_START <= month_of(p) <= TEST_END],
+    }
 
-    # Save processed data to disk
-    for split, dataframes in splits.items():
-        df = pd.concat(dataframes, ignore_index=True)
-        df.to_parquet(os.path.join(PROCESSED_DIR,f"{split}.parquet"), index=False)
-        print(f"Saved {split}: {len(df):,} trips")
+    # run the preprocessing tasks in a temporary directory, then move the final Parquet files to PROCESSED_DIR
+    with tempfile.TemporaryDirectory(prefix="preprocess_", dir=PROCESSED_DIR) as tmp:
+        for split, paths in splits.items():
+            started = perf_counter()  # start timer for this split
+ 
+            # Run once sequentially and once in parallel
+            output, seconds = {}, {}
+ 
+            for mode, workers in (("seq", 1), ("par", WORKERS)):
+                output[mode] = os.path.join(tmp, f"{split}_{mode}.parquet")
+                mode_started = perf_counter()
+                stats = run(paths, workers, output[mode], os.path.join(tmp, f"{split}_{mode}"))
+                seconds[mode] = perf_counter() - mode_started
+ 
+            n_shards, rows_before, rows_after = stats
+
+            print(f">>> {split.title()}")
+            print(f"{len(paths)} files, {n_shards} shards")
+            print(f"{rows_before:,} -> {rows_after:,} trips")
+            print(f"1 worker(s) = {seconds['seq']:.1f} s")
+            print(f"{WORKERS} worker(s) = {seconds['par']:.1f} s")
+
+            # check sequential and parallel outputs are identical
+            assert_parquet_equal(output["seq"], output["par"])
+            print("verified outputs match")
+
+            # move final Parquet file to PROCESSED_DIR
+            os.replace(output["par"], os.path.join(PROCESSED_DIR, f"{split}.parquet"))
+            print(f"saved in {perf_counter() - started:.1f} s")
