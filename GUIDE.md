@@ -2,7 +2,7 @@
 
 This is a quick guide to get started on the project.
 
-## Setup Environment
+## STEP 1 - Setup Environment
 
 Requires Python 3.10+
 
@@ -29,23 +29,27 @@ nbstripout --install
 
 Also please use [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/) to keep commit history tidy
 
-## Prepare Dataset
+## STEP 2 - Prepare Dataset
+
 Run [`download.py`](./src/download.py) to automatically download dataset files into `data/`
 
-or manually download files into `data/`:
-
-- [`yellow_tripdata_2026-01.parquet`](https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2026-01.parquet) 61.2 MB
-- [`yellow_tripdata_2026-02.parquet`](https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2026-02.parquet) 52.0 MB
-- [`yellow_tripdata_2026-03.parquet`](https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2026-03.parquet) 64.7 MB
-- [`yellow_tripdata_2026-04.parquet`](https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2026-04.parquet) 61.8 MB
+This project uses data from 2024-01 to 2026-09
 
 Source: https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page
 
-## Preprocess
+## STEP 3 - Preprocess
 
-Run [`preprocess.py`](./src/preprocess.py) to extract features and save the processed data
+Run [`preprocess.py`](./src/preprocess.py) to extract features
 
-Train/Test split saved to `data/processed/` as `.parquet` files (Jan-Mar train, Apr test)
+Parquet files are read from `data/` and sharded into equal smaller chunks, which are processed in sequence and in parallel. Processing includes data cleaning and feature extraction. Results of both are verified to be identical.
+
+- `SHARD_ROWS` - number of rows per shard
+- `WORKERS` - number of processes for sharding (1=sequential, N=parallel)
+- `THREADS` - number of threads for feature extraction (1=sequential, N=parallel)
+
+Progress is done in batches and saved to a temporary directory before merging to reduce memory usage.
+
+Train/Test splits saved to `data/processed/` as `.parquet` files
 
 ## Train
 
@@ -69,4 +73,14 @@ python src/predict.py models/random_forest.joblib --input trips.csv
 ```
 
 Input need at least `tpep_pickup_datetime`, `PULocationID` and `DOLocationID` columns
+
+## Rockhill Server
+
+Log into lab computer using you student email and password.
+
+SSH into the server using the group login.
+
+```
+ssh group19@rockhill.csis.ul.ie
+```
 
