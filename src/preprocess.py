@@ -15,6 +15,7 @@ from collections import deque
 from concurrent.futures import ThreadPoolExecutor # threads for feature extraction
 from concurrent.futures import ProcessPoolExecutor # processes for sharding
 from pathlib import Path
+from tqdm import tqdm
 from time import perf_counter
 
 import numpy as np
@@ -24,11 +25,10 @@ import pyarrow.parquet as pq
 DATA_DIR = "./data"
 PROCESSED_DIR = "./data/processed"
 
-SHARD_ROWS = 500_000
-WORKERS = 8
+SHARD_ROWS = 500_000 # rows per shard
+WORKERS = 8 # number of processes for sharding
+THREADS = 4 # number of threads for feature extraction
 
-# months before val_start are training, val_start up to test_start are validation
-VAL_START = "2025-07"
 # months before TEST_START are training data, months after TEST_END are ignored
 TEST_START, TEST_END = "2026-01", "2026-09"
 
@@ -43,7 +43,7 @@ COLUMNS = [
     "DOLocationID",
 ]
 
-# Reasonable bounds for NYC taxi trips (same thresholds as parallel_features.py).
+# Reasonable bounds for NYC taxi trips (same thresholds as example parallel_features.py).
 MIN_DURATION, MAX_DURATION = 1, 180      # minutes
 MIN_DISTANCE, MAX_DISTANCE = 0.1, 60     # miles
 MIN_FARE, MAX_FARE = 3, 250              # dollars
@@ -84,6 +84,7 @@ def extract_features(df, threads=4):
     hour = pickup.dt.hour
     weekday = pickup.dt.day_of_week
     month = pickup.dt.month
+    year = pickup.dt.year
 
     tasks = [
         lambda: {
@@ -101,7 +102,8 @@ def extract_features(df, threads=4):
 
     columns = {name: col for part in parts for name, col in part.items()}
 
-    return pd.DataFrame(columns, index=df.index)[FEATURES]
+    # year is kept for sampling, not a model feature
+    return pd.DataFrame({**columns, "year": year}, index=df.index)[FEATURES + ["year"]]
 
 
 def clean(df, path):
@@ -149,7 +151,7 @@ def process_parallel(shards, workers, temp_dir):
     results, pending = [], deque()
 
     with ProcessPoolExecutor(max_workers=workers) as executor:
-        for shard in shards:
+        for shard in tqdm(shards, desc="Parallel", unit=" shard", leave=False):
             pending.append(executor.submit(process_shard, *shard, temp_dir))
             if len(pending) >= workers:
                 results.append(pending.popleft().result())
@@ -163,7 +165,7 @@ def merge_shards(shard_paths, output_path):
     schema = pq.ParquetFile(shard_paths[0]).schema_arrow
     
     with pq.ParquetWriter(output_path, schema) as writer:
-        for path in shard_paths:
+        for path in tqdm(shard_paths, desc="Merging", unit=" shard", leave=False):
             writer.write_table(pq.ParquetFile(path).read())
 
 
@@ -189,9 +191,10 @@ def run(files, workers, output_path, shard_dir):
     os.makedirs(shard_dir, exist_ok=True)
 
     shards = iter_shards(files)
+    shards = list(shards) # materialize iterator for progress bar
 
     if workers == 1: # sequential processing
-        results = [process_shard(*shard, shard_dir) for shard in shards]
+        results = [process_shard(*shard, shard_dir) for shard in tqdm(shards, desc="Sequential", unit=" shard", leave=False)]
     else: # parallel processing
         results = process_parallel(shards, workers, shard_dir)
 
@@ -211,8 +214,7 @@ if __name__ == "__main__":
 
     # time-based split
     splits = {
-        "train": [p for p in files if month_of(p) < VAL_START],
-        "val": [p for p in files if VAL_START <= month_of(p) < TEST_START],
+        "train": [p for p in files if month_of(p) < TEST_START],
         "test": [p for p in files if TEST_START <= month_of(p) <= TEST_END]
     }
 
@@ -220,6 +222,8 @@ if __name__ == "__main__":
     with tempfile.TemporaryDirectory(prefix="preprocess_", dir=PROCESSED_DIR) as tmp:
         for split, paths in splits.items():
             started = perf_counter()  # start timer for this split
+            
+            print(f"{split} split: {month_of(paths[0])} to {month_of(paths[-1])}")
  
             # Run once sequentially and once in parallel
             output, seconds = {}, {}
@@ -232,16 +236,16 @@ if __name__ == "__main__":
  
             n_shards, rows_before, rows_after = stats
 
-            print(f">>> {split.title()}")
-            print(f"{len(paths)} files, {n_shards} shards")
-            print(f"{rows_before:,} -> {rows_after:,} trips")
-            print(f"1 worker(s) = {seconds['seq']:.1f} s")
-            print(f"{WORKERS} worker(s) = {seconds['par']:.1f} s")
-
+            print(f"  {len(paths)} files, {n_shards} shards")
+            print(f"  {rows_before:,} -> {rows_after:,} trips")
+            print(f"  1 workers, {THREADS} threads = {seconds['seq']:.1f} s")
+            print(f"  {WORKERS} workers, {THREADS} threads = {seconds['par']:.1f} s")
+            print(f"  speedup: {seconds['seq'] / seconds['par']:.1f}x")
+            
             # check sequential and parallel outputs are identical
             assert_parquet_equal(output["seq"], output["par"])
-            print("verified outputs match")
+            print("  verified outputs match")
 
             # move final Parquet file to PROCESSED_DIR
             os.replace(output["par"], os.path.join(PROCESSED_DIR, f"{split}.parquet"))
-            print(f"saved in {perf_counter() - started:.1f} s")
+            print(f"  saved {split}.parquet in {perf_counter() - started:.1f} s")

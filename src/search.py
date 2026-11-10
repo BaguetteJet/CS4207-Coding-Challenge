@@ -3,7 +3,7 @@
 #trials are independent so same training data, but different config 
 # so nothings shared while they run so each trial runs as its own process
 
-# best setting is chosen on the val split(july-dec 2025)
+# best setting is chosen on the 2025 validation sample
 
 
 import os
@@ -40,8 +40,8 @@ MODEL_DIR= "./models"
 RESULTS_DIR = "./results"
 
 SEED = 0
-TRAIN_FRAC = 0.02 # using 2% of training rows for the search(around 1.2mill out of the 61mill)
-VAL_FRAC = 0.05 #5% of val rows used to score each trial(around 1.1m of 22mill)
+TRAIN_FRAC = 0.02 # using 2% of 2024 rows for the search
+VAL_FRAC = 0.02 # 2% of 2025 rows used to score each trial
 WORKERS = 4 #we'll change this when running on the rockhill servers to 3
 
 TARGET = "duration_min"
@@ -77,18 +77,20 @@ def make_model(name,params):
     raise ValueError(f"unknown model {name}")
 
 
-#writing a seeded random sample of one split to search_dir once and returning its path
-def prepare_sample(split,frac):
+#writing a seeded random sample of one years rows of train.parquet to search_dir once and returning its path
+def prepare_sample(year,frac):
     os.makedirs(SEARCH_DIR,exist_ok=True)
-    out = os.path.join(SEARCH_DIR, f"{split}_{frac}.parquet")
+    out = os.path.join(SEARCH_DIR, f"{year}_{frac}.parquet")
     if os.path.exists(out):
         return out
 
     parts=[]
-    for batch in pq.ParquetFile(os.path.join(PROCESSED_DIR,f"{split}.parquet")).iter_batches(
-        batch_size=500_000, columns=FEATURES + [TARGET], use_threads= False):
+    for batch in pq.ParquetFile(os.path.join(PROCESSED_DIR,"train.parquet")).iter_batches(
+        batch_size=500_000, columns=FEATURES + [TARGET, "year"], use_threads=False):
 
-        parts.append(batch.to_pandas().sample(frac=frac,random_state=SEED).astype("float32"))
+        batch = batch.to_pandas()
+        year_rows = batch[batch["year"] == year]
+        parts.append(year_rows.drop(columns="year").sample(frac=frac,random_state=SEED).astype("float32"))
 
     pd.concat(parts,ignore_index=True).to_parquet(out,index=False)
     return out
@@ -152,10 +154,10 @@ def main():
     parser.add_argument("--order",choices=["grid","longest_first"],default="grid")
     args = parser.parse_args()
 
-    train_path = prepare_sample("train",TRAIN_FRAC)
-    val_path =prepare_sample("val",VAL_FRAC)
-    print(f"Train sample: {pq.ParquetFile(train_path).metadata.num_rows:,} rows |"
-          f"Validation sample: {pq.ParquetFile(val_path).metadata.num_rows:,}rows")
+    train_path = prepare_sample(2024,TRAIN_FRAC)
+    val_path =prepare_sample(2025,VAL_FRAC)
+    print(f"Train sample: {pq.ParquetFile(train_path).metadata.num_rows:,} rows | "
+          f"Validation sample: {pq.ParquetFile(val_path).metadata.num_rows:,} rows")
     print(f"{len(GRID)} trials, order = {args.order}\n")
 
     os.makedirs(RESULTS_DIR,exist_ok=True)
