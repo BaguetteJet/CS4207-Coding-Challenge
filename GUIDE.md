@@ -76,34 +76,14 @@ Input need at least `tpep_pickup_datetime`, `PULocationID` and `DOLocationID` co
 
 ## Rockhill Server
 
-Log into lab computer using you student email and password. (Windows)
+> See [server documentation](/docs/SERVER.md) for setup and details.
+
+Log into lab computer using you student email and password.
 
 SSH into the server using the group login.
 
-```
+```bash
 ssh group19@rockhill.csis.ul.ie
 ```
 
-Create project and data folder
-
-```
-mkdir -p ~/CS4207-Coding-Challenge/data
-```
-
-Data files are stored on server under `/home/cs4207/data/`
-
-Create a symbolic link shortcut pointing the project's data folder to those files
-
-```
-ln -s /home/cs4207/data/* ~/CS4207-Coding-Challenge/data
-```
-
-Copy folders/files/results between lab computer to server using:
-
-- [`rockhill.csis.ul.ie_upload.bat`](/rockhill.csis.ul.ie_upload.bat)
-- [`rockhill.csis.ul.ie_download.bat`](/rockhill.csis.ul.ie_download.bat)
-
-**NOTE** - folders/files to copy are listed in each script as `FILES=`
-
-Open the project folder on lab computer and run these scripts from within the folder
-
+Run [`rockhill.csis.ul.ie.bat`](/rockhill.csis.ul.ie.bat) from within `/CS4207-Coding-Challenge/` on Windows lab computer to upload/download files between lab computer and server.
