@@ -2,6 +2,7 @@ nbstripout
 jupyter
 ipykernel
 ipywidgets
+matplotlib
 tqdm
 requests
 scikit-learn
