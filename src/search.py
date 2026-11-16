@@ -43,19 +43,25 @@ SEED = 0
 TRAIN_FRAC = 0.02 # using 2% of 2024 rows for the search
 VAL_FRAC = 0.02 # 2% of 2025 rows used to score each trial
 WORKERS = 4 #we'll change this when running on the rockhill servers to 3
-
+REPEATS= 1 #timed runs per worker count since rubric mentions wanting the mean of 3+ for the benchmark
 TARGET = "duration_min"
 CATEGORICAL = ["PULocationID","DOLocationID","RatecodeID"]
 NUMERIC = [f for f in FEATURES if f not in CATEGORICAL]
 
-#4 ridge regression trials and 4 gb trials
+#2 ridge trials(alpha barelly mattered in the first search) and 6 gb trials
+#first search had its best result on the edge of the grid(highest lr,no depth limit)
+# so the grid now goes past it: higher learning rates and more boosting iterations
 GRID = (
-    [("ridge",{"alpha": a}) for a in (0.1, 1.0, 10.0, 100.0)]
-    + [("hgb", {"learning_rate": lr, "max_depth": d})
-       for lr in (0.1,0.3) for d in (6,None)]
+    [("ridge",{"alpha": a}) for a in (0.1, 10.0)]
+    + [("hgb", {"learning_rate": lr,"max_iter":it, "max_depth":None})
+       for lr in (0.3,0.5,0.7) for it in (200,500)]
 )
 
-
+def expected_cost(name,params):
+    #rough relative runn time of a trial which we'll use to submit the slowest one first
+    #a 500 iter hgb trial takes about 2.5 times a 200 iter one, ridgei s the quickest
+    return params.get("max_iter",0) if name == "hgb" else 0
+ 
 
 
 def make_model(name,params):
@@ -72,7 +78,7 @@ def make_model(name,params):
     #trees can split on the zone id ranges so dont need one-hot
     #fixed iterations and no early stopping so no random val split inside
     if name == "hgb":
-        return Pipeline([("model",HistGradientBoostingRegressor(**params,max_iter = 200, early_stopping=False,random_state=SEED))])
+        return Pipeline([("model",HistGradientBoostingRegressor(**params, early_stopping=False,random_state=SEED))])
 
     raise ValueError(f"unknown model {name}")
 
@@ -123,8 +129,8 @@ def search(workers,order,train_path,val_path):
     #running every trial in grid
     tasks = list(enumerate(GRID))
     if order == "longest_first":
-        #starting the gb trials first since theyre slower than ridge
-        tasks.sort(key=lambda task:task[1][0] != "hgb")
+        #submiting the most expensive trials first so no worker is left with a long trial at the end
+        tasks.sort(key=lambda task: expected_cost(*task[1]), reverse=True)
 
     ids = [trial_id for trial_id,_ in tasks]
     names = [name for _,(name,_) in tasks]
@@ -152,53 +158,73 @@ def main():
     parser = argparse.ArgumentParser(description="parallel hyperparameter search")
     parser.add_argument("--workers",type=int,nargs="+",default=[WORKERS])
     parser.add_argument("--order",choices=["grid","longest_first"],default="grid")
+    parser.add_argument("--repeats",type=int,default=REPEATS,help = "timed runs per worker count")
     args = parser.parse_args()
 
     train_path = prepare_sample(2024,TRAIN_FRAC)
     val_path =prepare_sample(2025,VAL_FRAC)
     print(f"Train sample: {pq.ParquetFile(train_path).metadata.num_rows:,} rows | "
           f"Validation sample: {pq.ParquetFile(val_path).metadata.num_rows:,} rows")
-    print(f"{len(GRID)} trials, order = {args.order}\n")
+    print(f"{len(GRID)} trials, order = {args.order},{args.repeats} repeats per worker count\n")
+
+    #warming up via reading both samples once untimed so the first timed run doesnt pay for
+    #loadingg thme from the disk while the later runs gets them from the OS file cache
+    pd.read_parquet(train_path), pd.read_parquet(val_path)
 
     os.makedirs(RESULTS_DIR,exist_ok=True)
-    tables,timings={},[]
+    metrics = ["trial","model","params","val_mae","val_rmse"]
+    reference = None   #scores from the very first run, every later run must match it
+    tables, runs = {}, []
 
     for workers in args.workers:
-        table,wall = search(workers, args.order,train_path, val_path)
-        tables[workers]= table
-        #summing all the seconds for total work done by all triials
-        busy = table["seconds"].sum()
-        print(f">>> {workers} workers")
+        per_repeat = []
+        for repeat in range(1, args.repeats + 1):
+            table,wall = search(workers, args.order,train_path, val_path)
 
+            #regardles of worker count or repeat, same trials have to give the same scores
+            if reference is None:
+                reference = table[metrics]
+            pd.testing.assert_frame_equal(reference, table[metrics])
 
-        print(table.drop(columns="pid").round(3).to_string(index=False))
-        print(f"wall clock {wall:.1f} s | sum of trial times {busy:.1f} s | "
-              f"longest trial {table['seconds'].max():.1f} s\n")
+            #summing all the seconds for total work done by all trials
+            busy = table["seconds"].sum()
+            runs.append({"workers": workers, "order": args.order, "repeat": repeat,
+                         "wall_s": wall, "busy_s": busy})
+            per_repeat.append(table)
+            print(f"  {workers} workers, run {repeat}: wall clock {wall:.1f} s | "
+                  f"sum of trial times {busy:.1f} s")
 
-        timings.append({"workers": workers, "order": args.order, "wall_s": wall, "busy_s": busy})
-        table.to_csv(os.path.join(RESULTS_DIR, f"search_{workers}w_{args.order}.csv"),index=False)
+        #per trial times averaged over the repeats (scores are identical so they're just kept)
+        mean_table = per_repeat[0].copy()
+        mean_table["seconds"] = sum(t["seconds"] for t in per_repeat) / len(per_repeat)
+        tables[workers] = mean_table
 
+        print(f">>> {workers} workers (trial seconds = mean of {args.repeats} run(s))")
+        print(mean_table.drop(columns="pid").round(3).to_string(index=False))
+        print()
+        mean_table.drop(columns="pid").to_csv(
+            os.path.join(RESULTS_DIR, f"search_{workers}w_{args.order}.csv"),index=False)
 
-#regardles of worker count same trials haveto give he same scores
-    metrics = ["trial","model","params","val_mae","val_rmse"]
-    first = args.workers[0]
-    for workers in args.workers[1:]:
-        pd.testing.assert_frame_equal(tables[first][metrics], tables[workers][metrics])
+    print("verified: identical validation scores for", ", ".join(map(str,args.workers)),
+          f"workers across {args.repeats} repeat(s)")
 
-    if len(args.workers) >1:
-        print("verified:identical validation scores for", ", ".join(map(str,args.workers)),"workers")
-        base = next((t["wall_s"] for t in timings if t["workers"] == 1),None)
-        if base:
-            for t in timings:
-                speedup = base/t["wall_s"]
-                print(f" {t['workers']} workers: {t['wall_s']:.1f} s, speedup {speedup:.2f}x, "
-                        f"efficiency {speedup/t['workers']:.2f}")
+    #every timed run,+ a summary with mean and spread per worker count
+    runs = pd.DataFrame(runs)
+    runs.to_csv(os.path.join(RESULTS_DIR, f"search_runs_{args.order}.csv"), index=False)
 
+    summary = runs.groupby("workers").agg(
+        wall_mean=("wall_s","mean"), wall_std=("wall_s","std"),
+        busy_mean=("busy_s","mean"), runs=("repeat","count")).reset_index()
+    if 1 in args.workers:
+        base = summary.loc[summary["workers"] == 1, "wall_mean"].iloc[0]
+        summary["speedup"] = base / summary["wall_mean"]
+        summary["efficiency"] = summary["speedup"] / summary["workers"]
+    summary.to_csv(os.path.join(RESULTS_DIR, f"search_timings_{args.order}.csv"), index=False)
+    print("\n" + summary.round(3).to_string(index=False))
 
-    pd.DataFrame(timings).to_csv(os.path.join(RESULTS_DIR, f"search_timings_{args.order}.csv"), index=False)
  
     # pick the best setting on val rmse, refit it, save it for evaluate.py
-    best = tables[first].loc[tables[first]["val_rmse"].idxmin()]
+    best = reference.loc[reference["val_rmse"].idxmin()]
     print(f"\nBest: {best['model']} {best['params']} | val RMSE {best['val_rmse']:.3f} | val MAE {best['val_mae']:.3f}")
  
     train = pd.read_parquet(train_path)
