@@ -1,3 +1,4 @@
+# Tudor Ventuneac - 23390131
 #hyperparameter search for task parallelism
 #evey (model,hyperparemeters) setting in GRID is 1 trial
 #trials are independent so same training data, but different config 
