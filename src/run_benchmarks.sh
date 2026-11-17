@@ -16,6 +16,10 @@ MAX_W="${WORKERS##* }"                       # largest worker count, used for th
 RUN_DIR="results/logs/$(hostname -s)-$(date +%Y%m%d-%H%M)"
 mkdir -p "$RUN_DIR"
 
+# clear result files from earlier runs so only this runs files are copied into RUN_DIR at the end
+# (earlier runs are kept in their own results/logs/ folders)
+rm -f results/search_*.csv results/gradient_*.csv results/gradient_weights.npz
+
 if ! ls data/yellow_tripdata_*.parquet >/dev/null 2>&1; then
     echo "No data/yellow_tripdata_*.parquet files found. Link or download the dataset first." >&2
     exit 1
