@@ -1,0 +1,12 @@
+Train: 7,879,064 trips in 8 shards [1000000, 1000000, 1000000, 1000000, 1000000, 1000000, 1000000, 879064] | Validation: 871,239 trips
+200 steps, eta = 0.2, lambda = 0.0, combine = ordered, 1 repeat(s)
+
+  1 workers, run 1: 71.8 s (359 ms/step) | final train RMSE 10.2518 | identical to first run: True (max diff 0.00e+00)
+
+ workers  wall_mean  wall_std  step_ms  runs  all_identical  speedup  efficiency
+       1     71.799       NaN  358.994     1           True      1.0         1.0
+
+verified: bit identical weights for 1 workers across 1 repeats
+
+Gradient descent: val RMSE 10.373 | val MAE 7.361
+scikitlearn Ridge: val RMSE 9.770 | val MAE 6.955 | fit 55.3 s

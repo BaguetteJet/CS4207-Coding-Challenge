@@ -1,0 +1,13 @@
+Train: 7,879,064 trips in 8 shards [1000000, 1000000, 1000000, 1000000, 1000000, 1000000, 1000000, 879064] | Validation: 871,239 trips
+200 steps, eta = 0.2, lambda = 0.0, combine = completion, 3 repeat(s)
+
+  3 workers, run 1: 44.0 s (220 ms/step) | final train RMSE 10.2518 | identical to first run: True (max diff 0.00e+00)
+  3 workers, run 2: 42.6 s (213 ms/step) | final train RMSE 10.2518 | identical to first run: False (max diff 8.88e-16)
+  3 workers, run 3: 42.6 s (213 ms/step) | final train RMSE 10.2518 | identical to first run: False (max diff 3.55e-15)
+
+ workers  wall_mean  wall_std  step_ms  runs  all_identical
+       3     43.056     0.787  215.282     3          False
+
+NOT identical: weights differ by up to 3.55e-15 between runs
+
+Gradient descent: val RMSE 10.373 | val MAE 7.361
