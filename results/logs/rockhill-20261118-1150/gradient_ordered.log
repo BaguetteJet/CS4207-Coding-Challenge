@@ -1,0 +1,21 @@
+Train: 7,879,064 trips in 8 shards [1000000, 1000000, 1000000, 1000000, 1000000, 1000000, 1000000, 879064] | Validation: 871,239 trips
+200 steps, eta = 0.2, lambda = 0.0, combine = ordered, 3 repeat(s)
+
+  1 workers, run 1: 100.4 s (502 ms/step) | final train RMSE 10.2518 | identical to first run: True (max diff 0.00e+00)
+  1 workers, run 2: 100.3 s (501 ms/step) | final train RMSE 10.2518 | identical to first run: True (max diff 0.00e+00)
+  1 workers, run 3: 100.8 s (504 ms/step) | final train RMSE 10.2518 | identical to first run: True (max diff 0.00e+00)
+  2 workers, run 1: 59.2 s (296 ms/step) | final train RMSE 10.2518 | identical to first run: True (max diff 0.00e+00)
+  2 workers, run 2: 64.6 s (323 ms/step) | final train RMSE 10.2518 | identical to first run: True (max diff 0.00e+00)
+  2 workers, run 3: 58.5 s (293 ms/step) | final train RMSE 10.2518 | identical to first run: True (max diff 0.00e+00)
+  3 workers, run 1: 42.5 s (212 ms/step) | final train RMSE 10.2518 | identical to first run: True (max diff 0.00e+00)
+  3 workers, run 2: 42.3 s (212 ms/step) | final train RMSE 10.2518 | identical to first run: True (max diff 0.00e+00)
+  3 workers, run 3: 42.4 s (212 ms/step) | final train RMSE 10.2518 | identical to first run: True (max diff 0.00e+00)
+
+ workers  wall_mean  wall_std  step_ms  runs  all_identical  speedup  efficiency
+       1    100.507     0.264  502.537     3           True    1.000       1.000
+       2     60.775     3.340  303.875     3           True    1.654       0.827
+       3     42.409     0.062  212.044     3           True    2.370       0.790
+
+verified: bit identical weights for 1, 2, 3 workers across 3 repeats
+
+Gradient descent: val RMSE 10.373 | val MAE 7.361

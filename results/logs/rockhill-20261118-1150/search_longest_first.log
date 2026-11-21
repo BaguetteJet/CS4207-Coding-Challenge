@@ -1,0 +1,24 @@
+Train sample: 787,906 rows | Validation sample: 871,239 rows
+8 trials, order = longest_first,3 repeats per worker count
+
+  3 workers, run 1: wall clock 48.5 s | sum of trial times 138.9 s
+  3 workers, run 2: wall clock 48.4 s | sum of trial times 137.8 s
+  3 workers, run 3: wall clock 48.7 s | sum of trial times 138.5 s
+>>> 3 workers (trial seconds = mean of 3 run(s))
+ trial model                                                     params  val_mae  val_rmse  seconds
+     0 ridge                                             {"alpha": 0.1}    6.967     9.794    6.132
+     1 ridge                                            {"alpha": 10.0}    6.965     9.784    3.783
+     2   hgb {"learning_rate": 0.3, "max_iter": 200, "max_depth": null}    5.174     7.832   13.704
+     3   hgb {"learning_rate": 0.3, "max_iter": 500, "max_depth": null}    4.717     7.385   30.546
+     4   hgb {"learning_rate": 0.5, "max_iter": 200, "max_depth": null}    4.928     7.607   12.839
+     5   hgb {"learning_rate": 0.5, "max_iter": 500, "max_depth": null}    4.641     7.358   29.215
+     6   hgb {"learning_rate": 0.7, "max_iter": 200, "max_depth": null}    4.875     7.638   12.773
+     7   hgb {"learning_rate": 0.7, "max_iter": 500, "max_depth": null}    4.706     7.536   29.416
+
+verified: identical validation scores for 3 workers across 3 repeat(s)
+
+ workers  wall_mean  wall_std  busy_mean  runs
+       3     48.506     0.143    138.408     3
+
+Best: hgb {"learning_rate": 0.5, "max_iter": 500, "max_depth": null} | val RMSE 7.358 | val MAE 4.641
+Saved models/search_best.joblib (scored on test by evaluate.py)
