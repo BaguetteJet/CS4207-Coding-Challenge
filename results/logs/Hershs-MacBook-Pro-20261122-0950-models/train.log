@@ -1,0 +1,6 @@
+Using tuned settings from ./results/best_params.json, best model on validation: hist_gradient_boosting
+Trained linear_regression in 0.4 s
+Trained decision_tree in 10.8 s
+Trained random_forest in 96.2 s
+Saved hist_gradient_boosting as best_model.joblib
+Trained hist_gradient_boosting in 19.6 s

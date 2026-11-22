@@ -92,11 +92,31 @@ The first run samples 20% of 2024 trips and saves them as 1M-row shards in `data
 
 Results saved to `results/`: `gradient_runs_<combine>.csv`, `gradient_timings_<combine>.csv`, `gradient_history.csv` (training RMSE per step) and `gradient_weights.npz`
 
+## Tune Models
+
+Run [`tune_models.py`](./src/tune_models.py) to pick hyperparameters for the tree models, scored on the same 2024 train / 2025 validation samples as `search.py` (test is never used)
+
+Scores saved to `results/model_tuning.csv`, the best setting per model and the best model overall to `results/best_params.json`. `train.py` uses that file if it exists and also saves the best model as `models/best_model.joblib`
+
 ## Train
 
 Run [`train.py`](./src/train.py) to fit the models
 
 Models with the preprocessing pipeline included are saved to `models/` as a `.joblib` files
+
+## Rockhill Model Results
+
+Run [`run_models.sh`](./src/run_models.sh) to tune, train and evaluate in one go, logs and results saved to `results/logs/<host>-<date>-models/` (~6 min on a laptop with `JOBS=8`)
+
+1. Lab computer: `git pull`, run [`rockhill.csis.ul.ie.bat`](/rockhill.csis.ul.ie.bat) and choose `1` (upload)
+2. Server (`data/processed/` must exist, see STEP 3):
+    ```bash
+    ssh group19@rockhill.csis.ul.ie
+    cd ~/CS4207-Coding-Challenge
+    source .venv/bin/activate
+    bash src/run_models.sh     # 3 cores by default
+    ```
+3. Lab computer: run the `.bat` and choose `2` (download), then `git add -f results/logs/rockhill-*-models`, commit and push
 
 ## Evaluate
 
