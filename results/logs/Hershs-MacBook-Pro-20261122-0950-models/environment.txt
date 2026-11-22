@@ -1,0 +1,6 @@
+host: Hershs-MacBook-Pro.local
+date: Sun Nov 22 09:50:19 GMT 2026
+git commit: caf56f3
+Python 3.13.13
+cores (logical): 10
+jobs: 8

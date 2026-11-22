@@ -1,0 +1,5 @@
+model,train_rows,train_s
+linear_regression,4147862,0.4177501249941997
+decision_tree,4147862,10.845642791013233
+random_forest,4147862,96.17826779198367
+hist_gradient_boosting,4147862,19.570451500010677
