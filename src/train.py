@@ -5,13 +5,14 @@ from time import perf_counter
 import joblib
 import pandas as pd
 import pyarrow.parquet as pq
+from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler
-from sklearn.linear_model import LinearRegression
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.linear_model import Ridge
 from sklearn.tree import DecisionTreeRegressor
 from sklearn.ensemble import RandomForestRegressor, HistGradientBoostingRegressor
 
-from preprocess import FEATURES
+from preprocess import FEATURES, RATE_CODES, ZONES
 
 TRAIN_PATH = "./data/processed/train.parquet"
 MODEL_DIR = "./models"
@@ -20,10 +21,20 @@ BEST_PARAMS_PATH = os.path.join(RESULTS_DIR, "best_params.json")  # written by t
 SAMPLE_FRAC = 0.05  # fraction of rows to train on; full data is too big for the tree models
 SEED = 0
 
+# zone ids and rate codes are categories, so the linear model gets them one-hot (same as search.py's ridge)
+# the trees can split on the raw ids, so they only get the scaler
+CATEGORICAL = ["PULocationID", "DOLocationID", "RatecodeID"]
+LINEAR_PREP = ColumnTransformer([
+    ("onehot", OneHotEncoder(categories=[[float(z) for z in ZONES]] * 2 + [[float(r) for r in RATE_CODES]],
+                             handle_unknown="ignore"), CATEGORICAL),
+    ("scale", StandardScaler(), [f for f in FEATURES if f not in CATEGORICAL]),
+])
+
 # fixed seeds so retraining gives the same models
 # hyperparameters picked on the search.py samples (train on 2024, score on 2025 val), never on test
 MODELS = {
-    "linear_regression": LinearRegression(copy_X=False),  # no extra copy
+    # ridge with one-hot zones: test RMSE 10.37 / R^2 0.43 vs 13.03 / 0.11 with plain LinearRegression on raw zone ids
+    "linear_regression": Ridge(alpha=10.0),  # alpha barely mattered in search.py
     # defaults below come from tune_models.py (results/model_tuning.csv), results/best_params.json overrides them
     # tried max_depth 10/15/20/None x min_samples_leaf 50/200, deeper with small leaves won (val RMSE 8.43)
     # min_samples_leaf caps the tree size even with no depth limit
@@ -72,7 +83,7 @@ if __name__ == "__main__":
     for name, estimator in MODELS.items():
         started = perf_counter()
         model = Pipeline([
-            ("scaler", StandardScaler()),
+            ("prep", LINEAR_PREP if name == "linear_regression" else StandardScaler()),
             ("model", estimator),
         ]).fit(X_train, y_train)
         seconds = perf_counter() - started
