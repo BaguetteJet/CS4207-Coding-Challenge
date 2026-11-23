@@ -48,7 +48,7 @@ def benchmark_preprocess(configs, attempts=1):
 
 
 def plot_preprocess_results():
-    df = pd.read_csv(f"{RESULTS_DIR}/preprocess/summary.csv")
+    df = pd.read_csv(f"{RESULTS_DIR}/preprocess-rockhill2/summary.csv")
 
     avg = df.groupby(["split", "shard_rows", "workers", "threads"])[["sequential", "parallel"]].mean().reset_index()
 
@@ -60,7 +60,7 @@ def plot_preprocess_results():
     x = np.arange(len(configs))
     width = 0.35
 
-    fig, axes = plt.subplots(1, avg["split"].nunique(), figsize=(7 * avg["split"].nunique(), 6), dpi=180)
+    fig, axes = plt.subplots(1, avg["split"].nunique(), figsize=(7 * avg["split"].nunique(), 5), dpi=180)
     axes = np.atleast_1d(axes)
 
     for ax, (split, data) in zip(axes, avg.groupby("split")):
