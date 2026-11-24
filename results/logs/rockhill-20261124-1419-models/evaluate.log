@@ -1,0 +1,7 @@
+                 model   mae   rmse    r2
+         decision_tree 5.291  8.634 0.608
+         random_forest 5.428  8.687 0.603
+hist_gradient_boosting 6.134  9.364 0.539
+            best_model 6.134  9.364 0.539
+     linear_regression 7.261 10.372 0.434
+Saved results

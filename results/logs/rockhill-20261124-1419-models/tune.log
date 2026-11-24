@@ -1,0 +1,25 @@
+16 trials, 3 workers
+                 model                                                        params  val_mae  val_rmse  seconds
+         decision_tree                   {"max_depth": null, "min_samples_leaf": 50}    5.447     8.427    4.198
+         decision_tree                     {"max_depth": 20, "min_samples_leaf": 50}    5.541     8.501    4.179
+         decision_tree                  {"max_depth": null, "min_samples_leaf": 200}    5.886     8.838    3.647
+         decision_tree                     {"max_depth": 15, "min_samples_leaf": 50}    5.941     8.847    3.256
+         decision_tree                    {"max_depth": 20, "min_samples_leaf": 200}    5.912     8.858    3.487
+         decision_tree                    {"max_depth": 15, "min_samples_leaf": 200}    6.128     9.035    3.614
+         decision_tree                     {"max_depth": 10, "min_samples_leaf": 50}    6.697     9.509    2.878
+         decision_tree                    {"max_depth": 10, "min_samples_leaf": 200}    6.722     9.542    2.973
+hist_gradient_boosting    {"learning_rate": 0.5, "max_iter": 500, "max_depth": null}    4.641     7.358   29.403
+hist_gradient_boosting    {"learning_rate": 0.3, "max_iter": 500, "max_depth": null}    4.717     7.385   30.849
+hist_gradient_boosting    {"learning_rate": 0.7, "max_iter": 500, "max_depth": null}    4.706     7.536   29.713
+hist_gradient_boosting    {"learning_rate": 0.5, "max_iter": 200, "max_depth": null}    4.928     7.607   13.092
+hist_gradient_boosting    {"learning_rate": 0.7, "max_iter": 200, "max_depth": null}    4.875     7.638   13.040
+hist_gradient_boosting    {"learning_rate": 0.3, "max_iter": 200, "max_depth": null}    5.174     7.832   14.039
+         random_forest {"n_estimators": 50, "max_depth": 20, "min_samples_leaf": 50}    5.419     8.296  127.408
+         random_forest {"n_estimators": 50, "max_depth": 15, "min_samples_leaf": 50}    5.793     8.624  128.757
+
+Best per model:
+  decision_tree: {"max_depth": null, "min_samples_leaf": 50} | val RMSE 8.427
+  hist_gradient_boosting: {"learning_rate": 0.5, "max_iter": 500, "max_depth": null} | val RMSE 7.358
+  random_forest: {"n_estimators": 50, "max_depth": 20, "min_samples_leaf": 50} | val RMSE 8.296
+Best model: hist_gradient_boosting
+Saved ./results/best_params.json (used by train.py)

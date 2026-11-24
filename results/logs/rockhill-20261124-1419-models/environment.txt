@@ -1,0 +1,6 @@
+host: rockhill
+date: Tue 24 Nov 14:19:16 UTC 2026
+git commit: 9091267
+Python 3.12.3
+cores (logical): 64
+jobs: 3

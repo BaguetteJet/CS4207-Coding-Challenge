@@ -1,0 +1,17 @@
+{
+  "decision_tree": {
+    "max_depth": null,
+    "min_samples_leaf": 50
+  },
+  "hist_gradient_boosting": {
+    "learning_rate": 0.5,
+    "max_iter": 500,
+    "max_depth": null
+  },
+  "random_forest": {
+    "n_estimators": 50,
+    "max_depth": 20,
+    "min_samples_leaf": 50
+  },
+  "best_model": "hist_gradient_boosting"
+}
