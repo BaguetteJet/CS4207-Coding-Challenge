@@ -34,7 +34,7 @@ def benchmark_preprocess(configs, attempts=1):
 
                 # Print and log output while preprocessing runs
                 for line in process.stdout:
-                    print(line, end="", flush=True)
+                    #print(line, end="", flush=True) # print in terminal
                     log.write(line)
                     log.flush()
 
@@ -47,8 +47,58 @@ def benchmark_preprocess(configs, attempts=1):
             run += 1
 
 
+def show_non_deterministic(configs, attempts=1):
+    # run the preprocess.py with different configurations and log the outputs
+    script = f"{SRC_DIR}/preprocess.py"
+    output_dir = f"{RESULTS_DIR}/preprocess"
+    os.makedirs(output_dir, exist_ok=True)
+
+    run = 1
+    return_code = 0
+    for shard_rows, workers, threads in configs:
+        for _ in range(attempts):
+            try:
+                output_lines = []
+                with open(f"{output_dir}/run{run:03d}-{shard_rows}-{workers}-{threads}-nondet.log", "w") as log:
+                    process = subprocess.Popen(
+                        [sys.executable, "-u", script,
+                        "--shard-rows", str(shard_rows),
+                        "--workers", str(workers),
+                        "--threads", str(threads),
+                        "--non-deterministic"],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT,
+                        text=True,
+                        bufsize=1
+                    )
+
+                    # Print and log output while preprocessing runs
+                    for line in process.stdout:
+                        #print(line, end="", flush=True) # print in terminal
+                        log.write(line)
+                        log.flush()
+                        output_lines.append(line)
+
+                    return_code = process.wait()
+
+                if return_code != 0:
+                    # Include the tail of preprocess.py's output in the error
+                    tail = "".join(output_lines[-50:])
+                    raise RuntimeError(
+                        f"preprocess.py exited with code {return_code} "
+                        f"(shard_rows={shard_rows}, workers={workers}, threads={threads}).\n"
+                        f"Last output:\n{tail}"
+                    )
+
+                print(f"Finished run {run:03d}: {shard_rows} shard rows, {workers} workers, {threads} threads")
+            except Exception as e:
+                return e
+            run += 1
+    return None
+
+
 def plot_preprocess_results():
-    df = pd.read_csv(f"{RESULTS_DIR}/preprocess-rockhill2/summary.csv")
+    df = pd.read_csv(f"{RESULTS_DIR}/preprocess/summary.csv")
 
     avg = df.groupby(["split", "shard_rows", "workers", "threads"])[["sequential", "parallel"]].mean().reset_index()
 
@@ -87,25 +137,17 @@ def plot_preprocess_results():
 
 if __name__ == "__main__":
 
-    
     #shard_rows, workers, threads
     preprocess_configs = [
         # Small shards
-        (100_000, 1, 1),
-        (100_000, 2, 2),
-        (100_000, 4, 2),
-        (100_000, 8, 2),
+        (100_000, 2, 4),
         (100_000, 4, 4),
         (100_000, 8, 4),
 
         # Large shards
-        (1_000_000, 1, 1),
-        (1_000_000, 2, 2),
-        (1_000_000, 4, 2),
-        (1_000_000, 8, 2),
+        (1_000_000, 2, 4),
         (1_000_000, 4, 4),
         (1_000_000, 8, 4),
     ]
     benchmark_preprocess(preprocess_configs, attempts=3)
     plot_preprocess_results()
-

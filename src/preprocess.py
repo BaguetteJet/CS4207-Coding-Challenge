@@ -16,6 +16,7 @@ import tempfile
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor # threads for feature extraction
 from concurrent.futures import ProcessPoolExecutor # processes for sharding
+from concurrent.futures import as_completed
 from pathlib import Path
 from tqdm import tqdm
 from time import perf_counter
@@ -31,6 +32,8 @@ RESULTS_DIR = "./results/preprocess"
 SHARD_ROWS = 500_000 # rows per shard
 WORKERS = 8 # number of processes for sharding
 THREADS = 4 # number of threads for feature extraction
+
+NON_DETERMINISTIC = False # if True, results may come back in a different order than the input files
 
 # months before TEST_START are training data, months after TEST_END are ignored
 TEST_START, TEST_END = "2026-01", "2026-09"
@@ -138,7 +141,6 @@ def iter_shards(files):
             yield shard_id, path, batch
             shard_id += 1
 
-
 def process_shard(shard_id, path, batch, temp_dir):
     # clean one shard and write it to temp_dir, then return (file, rows_in, rows_out)
     df = clean(batch.to_pandas(), path)
@@ -149,7 +151,12 @@ def process_shard(shard_id, path, batch, temp_dir):
     return out, batch.num_rows, len(df)
 
 
+# DETERMINISTIC: results come back in shard order, not completion order
 def process_parallel(shards, workers, temp_dir):
+
+    if NON_DETERMINISTIC:
+        return process_parallel_non_deterministic(shards, workers, temp_dir)
+
     # process shards in parallel, results come back in shard order
     results, pending = [], deque() # queue instead of as_completed() to preserve order of shards
 
@@ -163,10 +170,23 @@ def process_parallel(shards, workers, temp_dir):
     return results
 
 
+# NON-DETERMINISTIC: results come back in completion order, not shard order
+def process_parallel_non_deterministic(shards, workers, temp_dir):
+    results = []
+
+    with ProcessPoolExecutor(max_workers=workers) as executor:
+        futures = [executor.submit(process_shard, *shard, temp_dir) for shard in shards]
+
+        for future in tqdm(as_completed(futures), total=len(futures), desc="Parallel", unit=" shard", leave=False):
+            results.append(future.result())
+
+    return results
+
+
 def merge_shards(shard_paths, output_path):
     # append the shards to one Parquet file, one shard in memory at a time
     schema = pq.ParquetFile(shard_paths[0]).schema_arrow
-    
+
     with pq.ParquetWriter(output_path, schema) as writer:
         for path in tqdm(shard_paths, desc="Merging", unit=" shard", leave=False):
             writer.write_table(pq.ParquetFile(path).read())
@@ -228,11 +248,13 @@ if __name__ == "__main__":
     parser.add_argument("--shard-rows", type=int, default=SHARD_ROWS)
     parser.add_argument("--workers", type=int, default=WORKERS)
     parser.add_argument("--threads", type=int, default=THREADS)
+    parser.add_argument("--non-deterministic", action="store_true", default=NON_DETERMINISTIC)
     args = parser.parse_args()
 
     SHARD_ROWS = args.shard_rows
     WORKERS = args.workers
     THREADS = args.threads
+    NON_DETERMINISTIC = args.non_deterministic
 
     os.makedirs(PROCESSED_DIR, exist_ok=True)
 
@@ -248,18 +270,18 @@ if __name__ == "__main__":
     with tempfile.TemporaryDirectory(prefix="preprocess_", dir=PROCESSED_DIR) as tmp:
         for split, paths in splits.items():
             started = perf_counter()  # start timer for this split
-            
+
             print(f"{split} split: {month_of(paths[0])} to {month_of(paths[-1])}")
- 
+
             # Run once sequentially and once in parallel
             output, seconds = {}, {}
- 
+
             for mode, workers in (("seq", 1), ("par", WORKERS)):
                 output[mode] = os.path.join(tmp, f"{split}_{mode}.parquet")
                 mode_started = perf_counter()
                 stats = run(paths, workers, output[mode], os.path.join(tmp, f"{split}_{mode}"))
                 seconds[mode] = perf_counter() - mode_started
- 
+
             n_shards, rows_before, rows_after = stats
 
             print(f"  {len(paths)} files, {n_shards} shards")
@@ -267,7 +289,7 @@ if __name__ == "__main__":
             print(f"  1 workers, {THREADS} threads = {seconds['seq']:.1f} s")
             print(f"  {WORKERS} workers, {THREADS} threads = {seconds['par']:.1f} s")
             print(f"  speedup: {seconds['seq'] / seconds['par']:.1f}x")
-            
+
             # check sequential and parallel outputs are identical
             assert_parquet_equal(output["seq"], output["par"])
             print("  verified outputs match")
