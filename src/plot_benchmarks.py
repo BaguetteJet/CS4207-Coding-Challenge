@@ -4,9 +4,11 @@
 #
 #   python src/plot_benchmarks.py results/logs/rockhill-20261118-1150
 #   python src/plot_benchmarks.py results/logs/<run A> results/logs/<run B>    # compare machines
+#   python src/plot_benchmarks.py results --out results/plots/notebook          # after running the notebook
 
 import argparse
 import os
+import platform
 
 import matplotlib
 matplotlib.use("Agg")   # draw straight to files, works on the server too
@@ -26,7 +28,10 @@ plt.rcParams.update({
 
 def machine_name(run_dir):
     # e.g. "Rockhill (AMD EPYC 9124)" or "Apple M4", from environment.txt
-    lines = open(os.path.join(run_dir, "environment.txt")).read().splitlines()
+    env_path = os.path.join(run_dir, "environment.txt")
+    if not os.path.exists(env_path):   # e.g. results/ written by a notebook run: describe this machine
+        return f"{platform.node().split('.')[0]} ({os.cpu_count()} cores)"
+    lines = open(env_path).read().splitlines()
     host = next((l.split(":", 1)[1].strip() for l in lines if l.startswith("host:")), "")
     cpu = ""
     for line in lines:
@@ -76,24 +81,66 @@ def plot_speedup(runs):
     return fig
 
 
+SEQ_COLOUR, PAR_COLOUR = "#3a76af", "#ee8636"   # same blue/orange as the preprocessing chart
+
+
 def plot_times(runs):
     # mean wall-clock time per worker count, error bars = standard deviation over repeats
+    # one machine: 1 worker in blue (sequential), more workers in orange (parallel), speedup on top
     fig, axes = plt.subplots(1, 2, figsize=(12, 5.2))
     width = 0.8 / len(runs)
     for ax, (task, title) in zip(axes, TASKS.items()):
         for i, (label, run_dir) in enumerate(runs):
             t = timings(run_dir, task)
             x = t["workers"] + (i - (len(runs) - 1) / 2) * width
-            bars = ax.bar(x, t["wall_mean"], width, yerr=t["wall_std"].fillna(0), capsize=4, label=label)
+            colours = ([SEQ_COLOUR if w == 1 else PAR_COLOUR for w in t["workers"]]
+                       if len(runs) == 1 else None)
+            bars = ax.bar(x, t["wall_mean"], width, yerr=t["wall_std"].fillna(0), capsize=4,
+                          label=label, color=colours)
             ax.bar_label(bars, labels=[f"{v:.1f} s" for v in t["wall_mean"]], label_type="center",
                          color="white", fontweight="bold", fontsize=11)
+            if len(runs) == 1:
+                ax.bar_label(bars, labels=["" if w == 1 else f"{s:.2f}x"
+                                           for w, s in zip(t["workers"], t["speedup"])],
+                             padding=6, fontweight="bold", fontsize=12)
         ax.set(title=title, xlabel="Workers", ylabel="Wall-clock time (s)",
                xticks=sorted(timings(runs[0][1], task)["workers"]))
+        ax.set_ylim(0, ax.get_ylim()[1] * 1.08)
         ax.grid(axis="y", alpha=0.3)
     if len(runs) > 1:
         axes[0].legend()
+    else:
+        from matplotlib.patches import Patch
+        axes[1].legend(handles=[Patch(color=SEQ_COLOUR, label="Sequential"),
+                                Patch(color=PAR_COLOUR, label="Parallel")])
     fig.suptitle(f"Mean run time per worker count\n{source(runs)}  ·  error bars: std over repeats",
                  fontsize=14)
+    return fig
+
+
+def plot_times_compact(runs):
+    # short, wide version of plot_times for tight poster space (one machine)
+    label, run_dir = runs[0]
+    fig, axes = plt.subplots(1, 2, figsize=(12, 3.4))
+    for ax, (task, title) in zip(axes, TASKS.items()):
+        t = timings(run_dir, task)
+        colours = [SEQ_COLOUR if w == 1 else PAR_COLOUR for w in t["workers"]]
+        bars = ax.bar(t["workers"], t["wall_mean"], 0.7, color=colours)
+        ax.bar_label(bars, labels=[f"{v:.0f} s" for v in t["wall_mean"]], label_type="center",
+                     color="white", fontweight="bold", fontsize=12)
+        ax.bar_label(bars, labels=["" if w == 1 else f"{s:.2f}x"
+                                   for w, s in zip(t["workers"], t["speedup"])],
+                     padding=4, fontweight="bold", fontsize=13)
+        ax.set_ylim(0, t["wall_mean"].max() * 1.22)
+        ax.set_yticks([])
+        ax.spines["left"].set_visible(False)
+        ax.set(xticks=list(t["workers"]), xlabel="Workers")
+        ax.set_title(title, fontsize=14)
+    from matplotlib.patches import Patch
+    axes[1].legend(handles=[Patch(color=SEQ_COLOUR, label="Sequential"),
+                            Patch(color=PAR_COLOUR, label="Parallel")], loc="upper right", fontsize=11)
+    fig.text(0.5, -0.04, f"{label} · mean wall-clock time of 3 runs · speedup vs 1 worker",
+             ha="center", fontsize=11, color="dimgrey")
     return fig
 
 
@@ -154,17 +201,18 @@ def plot_convergence(runs):
 
 def main():
     parser = argparse.ArgumentParser(description="plot benchmark results")
-    parser.add_argument("run_dirs", nargs="+", help="folders from results/logs/")
+    parser.add_argument("run_dirs", nargs="+", help="run folders (results/logs/<run>, or results/ after a notebook run)")
+    parser.add_argument("--out", default=PLOT_DIR, help="folder for the charts")
     args = parser.parse_args()
 
     runs = [(machine_name(d), d) for d in args.run_dirs]
-    os.makedirs(PLOT_DIR, exist_ok=True)
+    os.makedirs(args.out, exist_ok=True)
 
-    for name, make in [("speedup", plot_speedup), ("times", plot_times),
+    for name, make in [("speedup", plot_speedup), ("times", plot_times), ("times_compact", plot_times_compact),
                        ("load_imbalance", plot_longest_first), ("convergence", plot_convergence)]:
         fig = make(runs)
         fig.tight_layout()
-        path = os.path.join(PLOT_DIR, f"{name}.png")
+        path = os.path.join(args.out, f"{name}.png")
         fig.savefig(path, dpi=200, bbox_inches="tight")
         plt.close(fig)
         print("saved", path)
