@@ -129,6 +129,8 @@ def clean(df, path):
         & df["trip_distance"].between(MIN_DISTANCE, MAX_DISTANCE)
         & df["fare_amount"].between(MIN_FARE, MAX_FARE)
         & df["RatecodeID"].fillna(0).isin(RATE_CODES)
+        & df["PULocationID"].between(1, 265)
+        & df["DOLocationID"].between(1, 265)
     )
     return df[ok].assign(duration_min=duration[ok])
 
