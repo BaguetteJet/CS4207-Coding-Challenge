@@ -1,3 +1,4 @@
+#src/search.py
 # Tudor Ventuneac - 23390131
 #hyperparameter search for task parallelism
 #evey (model,hyperparemeters) setting in GRID is 1 trial
@@ -62,7 +63,7 @@ def expected_cost(name,params):
     #rough relative runn time of a trial which we'll use to submit the slowest one first
     #a 500 iter hgb trial takes about 2.5 times a 200 iter one, ridgei s the quickest
     return params.get("max_iter",0) if name == "hgb" else 0
- 
+
 
 
 def make_model(name,params):
@@ -223,17 +224,17 @@ def main():
     summary.to_csv(os.path.join(RESULTS_DIR, f"search_timings_{args.order}.csv"), index=False)
     print("\n" + summary.round(3).to_string(index=False))
 
- 
+
     # pick the best setting on val rmse, refit it, save it for evaluate.py
     best = reference.loc[reference["val_rmse"].idxmin()]
     print(f"\nBest: {best['model']} {best['params']} | val RMSE {best['val_rmse']:.3f} | val MAE {best['val_mae']:.3f}")
- 
+
     train = pd.read_parquet(train_path)
     model = make_model(best["model"], json.loads(best["params"])).fit(train[FEATURES], train[TARGET])
     os.makedirs(MODEL_DIR, exist_ok=True)
     joblib.dump(model, os.path.join(MODEL_DIR, "search_best.joblib"))
     print("Saved models/search_best.joblib (scored on test by evaluate.py)")
- 
- 
+
+
 if __name__ == "__main__":
     main()

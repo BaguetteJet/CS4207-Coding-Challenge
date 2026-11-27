@@ -2,6 +2,8 @@
 
 # CS4207 - NYC Taxi Trip Duration Prediction
 
+![poster](./docs/CS4207_Group19_Poster.svg)
+
 ## Introduction
 
 Predict the trip duration (Estimated Time of Arrival) of NYC taxi trips using regression. Analyse the difference between running project workloads in sequence vs in parallel. Run experiments on the `@rockhill.csis.ul.ie ` server.
