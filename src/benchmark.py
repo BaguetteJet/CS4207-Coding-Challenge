@@ -97,8 +97,11 @@ def show_non_deterministic(configs, attempts=1):
     return None
 
 
-def plot_preprocess_results():
-    df = pd.read_csv(f"{RESULTS_DIR}/preprocess/summary.csv")
+def plot_preprocess_results(csv_dir = None):
+    if csv_dir is None:
+        df = pd.read_csv(f"{RESULTS_DIR}/preprocess/summary.csv")
+    else:
+        df = pd.read_csv(csv_dir)
 
     avg = df.groupby(["split", "shard_rows", "workers", "threads"])[["sequential", "parallel"]].mean().reset_index()
 
