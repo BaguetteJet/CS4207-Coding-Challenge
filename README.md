@@ -3,6 +3,7 @@
 # CS4207 - NYC Taxi Trip Duration Prediction
 
 ![poster](./docs/CS4207_Group19_Poster.svg)
+*Poster Submission*
 
 ## Introduction
 
